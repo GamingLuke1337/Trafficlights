@@ -17,6 +17,7 @@ local function ShowNotification(title, text, type)
         elseif Config.Notify == 'print' then
             print(text)
         elseif Config.Notify == 'none' then
+            -- No notification
         end
         lastNotificationTime = currentTime
     end
@@ -53,12 +54,14 @@ CreateThread(function()
                         local headingDiff = math.abs(playerHeading - lightHeading)
 
                         if headingDiff < Config.HEADING_THRESHOLD or headingDiff > (360.0 - Config.HEADING_THRESHOLD) then
+                            -- Sync the traffic light state with the server (set green)
                             TriggerServerEvent('trafficlights:syncTrafficLight', trafficLight, true)
-                            SetEntityTrafficlightOverride(trafficLight, 0)
+                            SetEntityTrafficlightOverride(trafficLight, 0)  -- Set light to green
                             ShowNotification("Traffic Lights", "Traffic light set to green.", "success")
 
+                            -- Set a timeout to change back to red
                             SetTimeout(Config.TRAFFIC_LIGHT_GREEN_DURATION_MS, function()
-                                SetEntityTrafficlightOverride(trafficLight, -1)
+                                SetEntityTrafficlightOverride(trafficLight, -1)  -- Reset light to red
                                 ShowNotification("Traffic Lights", "Traffic light reset.", "inform")
                             end)
                             break
@@ -68,6 +71,7 @@ CreateThread(function()
                     end
                 end
 
+                -- Adjust polling frequency based on proximity to traffic lights
                 if trafficLight ~= 0 then
                     local normalizedDistance = (searchDistance - Config.SEARCH_MIN_DISTANCE) / (Config.SEARCH_MAX_DISTANCE - Config.SEARCH_MIN_DISTANCE)
                     Config.TRAFFIC_LIGHT_POLL_FREQUENCY_MS = math.max(50, math.floor(Config.TRAFFIC_LIGHT_POLL_FREQUENCY_MS - normalizedDistance * (Config.TRAFFIC_LIGHT_POLL_FREQUENCY_MS - 50)))
@@ -75,7 +79,26 @@ CreateThread(function()
                 end
             end
         else
-            Wait(1000)
+            Wait(1000)  -- If no siren or vehicle detected, slow down polling
         end
     end
+end)
+
+-- Listen for updates from the server on traffic light state
+RegisterNetEvent('trafficlights:updateTrafficLight')
+AddEventHandler('trafficlights:updateTrafficLight', function(trafficLight, isGreen)
+    -- Store or update the traffic light state in local memory
+    if isGreen then
+        SetEntityTrafficlightOverride(trafficLight, 0)  -- Green light
+    else
+        SetEntityTrafficlightOverride(trafficLight, -1)  -- Red light
+    end
+end)
+
+-- Listen for notifications about traffic light state changes
+RegisterNetEvent('trafficlights:notifyStateChange')
+AddEventHandler('trafficlights:notifyStateChange', function(trafficLight, isGreen)
+    -- Display notification when state changes
+    local status = isGreen and "Green" or "Red"
+    ShowNotification("Traffic Light Change", "Traffic light is now " .. status, "info")
 end)
